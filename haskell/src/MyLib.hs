@@ -49,21 +49,47 @@ cp_frontier_example = MultiSet.fromList [
         ]
     ]
 
+-- Predicates
+isTerm :: Formula -> Bool
+isTerm (Term _) = True
+isTerm _ = False
+
+isVar :: Formula -> Bool
+isVar (Var _) = True
+isVar _ = False
+
+-- Projections
+fHead :: Formula -> String
+fHead (Term x) = x
+fHead (Function x _) = x
+fHead _ = error "not a function" -- corresponds to the definition from paper
+
+fArgs :: Formula -> [Formula]
+fArgs (Function _ x) = x
+
+-- Properties
+fArity :: Formula -> Int
+fArity (Function _ x) = length x
+
+-- Convertors
+splitVarNonVar :: MultiSet Formula -> (MultiSet Formula, MultiSet Formula)
+splitVarNonVar x = MultiSet.partition isVar x
+
 -- set should be used here on the left-hand side
 dec :: MultiSet Formula -> (Formula, Multiequations)
-dec m = if (not . MultiSet.null . getVar . splitVarNonVar) m then 
-                ((head . MultiSet.elems . getVar . splitVarNonVar) m, (Set.singleton . makeMultEq) m)
+dec m = let varMultiset = fst . splitVarNonVar
+            nonVarMultiset = snd . splitVarNonVar in (
+            if (not . MultiSet.null . varMultiset) m then 
+                ((head . MultiSet.elems . varMultiset) m, (Set.singleton . makeMultEq) m)
             else
                 -- below efficiency can be improved
-                let funcs = (MultiSet.distinctElems . getNonVar . splitVarNonVar) m
+                let funcs = (MultiSet.distinctElems . nonVarMultiset) m
                     funcNames = (nub . (map fHead)) funcs
                     disFuncsAmount = length funcNames
                     fstFunc = head funcs in (
                     if disFuncsAmount == 1 then
-                        if (\x -> case x of
-                            Term _ -> True
-                            _ -> False) fstFunc then
-                                (fstFunc, Set.empty :: Multiequations)
+                        if isTerm fstFunc then
+                            (fstFunc, Set.empty :: Multiequations)
                         else
                             let funcArgs = MultiSet.fold (\x y -> (fArgs x):y) [] m
                                 mn = (transpose . reverse) funcArgs
@@ -73,19 +99,10 @@ dec m = if (not . MultiSet.null . getVar . splitVarNonVar) m then
                     else
                         error "multiple function symbols exist"
                     )
-        where
-            mulSetTupToMultEq (l, r) = (MultiSet.toSet l, r)
-            splitVarNonVar x = MultiSet.partition (\x -> case x of 
-                Var _ -> True
-                _ -> False) x
-            getVar (x, _) = x
-            getNonVar (_, x) = x
-            makeMultEq x = (mulSetTupToMultEq . splitVarNonVar) x
-            fHead (Term x) = x
-            fHead (Function x _) = x
-            fHead _ = error "not a function"
-            fArgs (Function _ x) = x
-            fArity (Function _ x) = length x
+                )
+                where
+                    mulSetTupToMultEq (l, r) = (MultiSet.toSet l, r)
+                    makeMultEq x = (mulSetTupToMultEq . splitVarNonVar) x
 
 
 res = dec cp_frontier_example
