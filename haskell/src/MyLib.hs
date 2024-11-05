@@ -64,8 +64,8 @@ fHead (Term x) = x
 fHead (Function x _) = x
 fHead _ = error "not a function" -- corresponds to the definition from paper
 
-fArgs :: Formula -> [Formula]
-fArgs (Function _ x) = x
+fParams :: Formula -> [Formula]
+fParams (Function _ x) = x
 
 -- Properties
 fArity :: Formula -> Int
@@ -75,6 +75,12 @@ fArity (Function _ x) = length x
 splitVarNonVar :: MultiSet Formula -> (MultiSet Formula, MultiSet Formula)
 splitVarNonVar x = MultiSet.partition isVar x
 
+finalFormConv :: (MultiSet Formula, MultiSet Formula) -> (Set Formula, MultiSet Formula)
+finalFormConv (l, r) = (MultiSet.toSet l, r)
+
+makeMultEq :: MultiSet Formula -> (Set Formula, MultiSet Formula)
+makeMultEq x = (finalFormConv . splitVarNonVar) x
+
 -- set should be used here on the left-hand side
 dec :: MultiSet Formula -> (Formula, Multiequations)
 dec m = let varMultiset = fst . splitVarNonVar
@@ -82,7 +88,6 @@ dec m = let varMultiset = fst . splitVarNonVar
             if (not . MultiSet.null . varMultiset) m then 
                 ((head . MultiSet.elems . varMultiset) m, (Set.singleton . makeMultEq) m)
             else
-                -- below efficiency can be improved
                 let funcs = (MultiSet.distinctElems . nonVarMultiset) m
                     funcNames = (nub . (map fHead)) funcs
                     disFuncsAmount = length funcNames
@@ -91,21 +96,18 @@ dec m = let varMultiset = fst . splitVarNonVar
                         if isTerm fstFunc then
                             (fstFunc, Set.empty :: Multiequations)
                         else
-                            let funcArgs = MultiSet.fold (\x y -> (fArgs x):y) [] m
-                                mn = (transpose . reverse) funcArgs
-                                mnSet = (map (\x -> MultiSet.fromList x)) mn in (
-                                    ((Function (fHead fstFunc) (map (fst . dec) mnSet)), (Set.unions . (map (snd . dec))) mnSet)
+                            let funcParams = MultiSet.fold (\x y -> (fParams x):y) [] m
+                                mi = (transpose . reverse) funcParams -- reverse undoes reversion in the previous fold
+                                miMulSet = map MultiSet.fromList mi
+                                miCParams = map (fst . dec) miMulSet
+                                miFrontEqs = map (snd . dec) miMulSet
+                                in (
+                                    ((Function (fHead fstFunc) miCParams), Set.unions miFrontEqs)
                             )
                     else
                         error "multiple function symbols exist"
                     )
                 )
-                where
-                    mulSetTupToMultEq (l, r) = (MultiSet.toSet l, r)
-                    makeMultEq x = (mulSetTupToMultEq . splitVarNonVar) x
-
-
-res = dec cp_frontier_example
 
 encapsulate :: String -> String -> [String] -> String
 encapsulate l r xs = l ++ (intercalate ", ") xs ++ r
@@ -122,3 +124,5 @@ print_sm (f, set_sm) = putStrLn ("Common part\n    " ++ extract_term f ++ "\nFro
         print_s s = ((encapsulate "( " " )") . (map extract_term) . MultiSet.distinctElems) s
         print_set_sm [] = ""
         print_set_sm ((m, s):sm) = "    " ++ print_m m ++ " = " ++ print_s s ++ ",\n" ++ print_set_sm sm
+
+res = dec cp_frontier_example
