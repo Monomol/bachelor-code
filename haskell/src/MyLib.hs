@@ -8,34 +8,34 @@ import qualified Data.Set as Set
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
 
-data Formula = Var String
-    | Term String
-    | Function String [Formula]
+-- make term to function, rename formula to term
+data Term = Var String
+    | Function String [Term]
     deriving (Show, Ord, Eq)
 
 
-type Multiequation = (Set Formula, MultiSet Formula)
+type Multiequation = (Set Term, MultiSet Term)
 type Multiequations = Set Multiequation
 
-cp_frontier_example :: MultiSet Formula
+cp_frontier_example :: MultiSet Term
 cp_frontier_example = MultiSet.fromList [
     Function "f"
         [
             Var "x1",
             Function "g"
-                [Term "a",
+                [Function "a" [],
                     Function "f"
-                        [ Var "x5", Term "b" ]
+                        [ Var "x5", Function "b" [] ]
                 ]
         ],
     Function "f"
         [
             Function "h"
-                [ Term "c" ],
+                [ Function "c" [] ],
             Function "g"
                 [Var "x2",
                     Function "f"
-                        [ Term "b", Var "x5" ]
+                        [ Function "b" [], Var "x5" ]
                 ]
         ],
     Function "f"
@@ -50,39 +50,38 @@ cp_frontier_example = MultiSet.fromList [
     ]
 
 -- Predicates
-isTerm :: Formula -> Bool
-isTerm (Term _) = True
-isTerm _ = False
+isConstant :: Term -> Bool
+isConstant (Function _ []) = True
+isConstant _ = False
 
-isVar :: Formula -> Bool
+isVar :: Term -> Bool
 isVar (Var _) = True
 isVar _ = False
 
 -- Projections
-fHead :: Formula -> String
-fHead (Term x) = x
+fHead :: Term -> String
 fHead (Function x _) = x
 fHead _ = error "not a function" -- corresponds to the definition from paper
 
-fParams :: Formula -> [Formula]
+fParams :: Term -> [Term]
 fParams (Function _ x) = x
 
 -- Properties
-fArity :: Formula -> Int
+fArity :: Term -> Int
 fArity (Function _ x) = length x
 
 -- Convertors
-splitVarNonVar :: MultiSet Formula -> (MultiSet Formula, MultiSet Formula)
+splitVarNonVar :: MultiSet Term -> (MultiSet Term, MultiSet Term)
 splitVarNonVar x = MultiSet.partition isVar x
 
-finalFormConv :: (MultiSet Formula, MultiSet Formula) -> (Set Formula, MultiSet Formula)
+finalFormConv :: (MultiSet Term, MultiSet Term) -> (Set Term, MultiSet Term)
 finalFormConv (l, r) = (MultiSet.toSet l, r)
 
-makeMultEq :: MultiSet Formula -> (Set Formula, MultiSet Formula)
+makeMultEq :: MultiSet Term -> (Set Term, MultiSet Term)
 makeMultEq x = (finalFormConv . splitVarNonVar) x
 
 -- set should be used here on the left-hand side
-dec :: MultiSet Formula -> (Formula, Multiequations)
+dec :: MultiSet Term -> (Term, Multiequations)
 dec m = let varMultiset = fst . splitVarNonVar
             nonVarMultiset = snd . splitVarNonVar in (
             if (not . MultiSet.null . varMultiset) m then 
@@ -93,7 +92,7 @@ dec m = let varMultiset = fst . splitVarNonVar
                     disFuncsAmount = length funcNames
                     fstFunc = head funcs in (
                     if disFuncsAmount == 1 then
-                        if isTerm fstFunc then
+                        if isConstant fstFunc then
                             (fstFunc, Set.empty :: Multiequations)
                         else
                             let funcParams = MultiSet.fold (\x y -> (fParams x):y) [] m
@@ -112,12 +111,12 @@ dec m = let varMultiset = fst . splitVarNonVar
 encapsulate :: String -> String -> [String] -> String
 encapsulate l r xs = l ++ (intercalate ", ") xs ++ r
 
-extract_term :: Formula -> String
-extract_term (Term x) = x
-extract_term (Var x) = x 
+extract_term :: Term -> String
+extract_term (Var x) = x
+extract_term (Function x []) = x 
 extract_term (Function x xs) = x ++ encapsulate "(" ")" (map extract_term xs)
 
-print_sm :: (Formula, Multiequations) -> IO()
+print_sm :: (Term, Multiequations) -> IO()
 print_sm (f, set_sm) = putStrLn ("Common part\n    " ++ extract_term f ++ "\nFrontier\n{\n" ++ print_set_sm (Set.elems set_sm) ++ "}")
     where
         print_m m = ((encapsulate "{ " " }") . (map extract_term) . Set.elems) m
