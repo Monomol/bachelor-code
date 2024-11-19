@@ -1,4 +1,4 @@
-module MyLib (dec) where
+module MyLib where
 
 import Data.List
 
@@ -8,7 +8,7 @@ import qualified Data.Set as Set
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
 
--- make term to function, rename formula to term
+
 data Term = Var String
     | Function String [Term]
     deriving (Show, Ord, Eq)
@@ -16,38 +16,6 @@ data Term = Var String
 
 type Multiequation = (Set Term, MultiSet Term)
 type Multiequations = Set Multiequation
-
-cp_frontier_example :: MultiSet Term
-cp_frontier_example = MultiSet.fromList [
-    Function "f"
-        [
-            Var "x1",
-            Function "g"
-                [Function "a" [],
-                    Function "f"
-                        [ Var "x5", Function "b" [] ]
-                ]
-        ],
-    Function "f"
-        [
-            Function "h"
-                [ Function "c" [] ],
-            Function "g"
-                [Var "x2",
-                    Function "f"
-                        [ Function "b" [], Var "x5" ]
-                ]
-        ],
-    Function "f"
-        [
-            Function "h"
-                [ Var "x4" ],
-            Function "g"
-                [Var "x6",
-                 Var "x3"
-                ]
-        ]
-    ]
 
 -- Predicates
 isConstant :: Term -> Bool
@@ -80,7 +48,7 @@ finalFormConv (l, r) = (MultiSet.toSet l, r)
 makeMultEq :: MultiSet Term -> (Set Term, MultiSet Term)
 makeMultEq x = (finalFormConv . splitVarNonVar) x
 
--- set should be used here on the left-hand side
+
 dec :: MultiSet Term -> (Term, Multiequations)
 dec m = let varMultiset = fst . splitVarNonVar
             nonVarMultiset = snd . splitVarNonVar in (
@@ -123,5 +91,3 @@ print_sm (f, set_sm) = putStrLn ("Common part\n    " ++ extract_term f ++ "\nFro
         print_s s = ((encapsulate "( " " )") . (map extract_term) . MultiSet.distinctElems) s
         print_set_sm [] = ""
         print_set_sm ((m, s):sm) = "    " ++ print_m m ++ " = " ++ print_s s ++ ",\n" ++ print_set_sm sm
-
-res = dec cp_frontier_example

@@ -70,7 +70,6 @@ library
     build-depends:
         base ^>=4.17.2.1,
         multiset^>=0.3.4.3,
-        QuickCheck >= 2.15.0 && < 2.16,
         containers >= 0.6.7 && < 0.7
 
     -- Directories containing source files.
@@ -104,6 +103,7 @@ test-suite funcs-test
     -- Test dependencies.
     build-depends:
         base ^>=4.17.2.1,
-        QuickCheck >= 2.15.0 && < 2.16,
+        HUnit ^>=1.6.2,
+        multiset^>=0.3.4.3,
         containers >= 0.6.7 && < 0.7,
         funcs
