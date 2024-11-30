@@ -5,9 +5,17 @@ import Data.List
 import Data.Set (Set)
 import qualified Data.Set as Set
 
+import Data.Tuple (swap)
+import Data.Maybe (fromJust)
+
+import Data.SortedList (SortedList)
+import qualified Data.SortedList as SortedList
+
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
 
+-- coq functions fresh, elems
+-- coq functions minuska var neco
 
 data Term = Var String
     | Function String [Term]
@@ -16,6 +24,10 @@ data Term = Var String
 
 type Multiequation = (Set Term, MultiSet Term)
 type Multiequations = Set Multiequation
+
+type T =  [Multiequation]
+type U = SortedList (Int, Multiequation)
+type R = (T, U)
 
 -- Predicates
 isConstant :: Term -> Bool
@@ -75,6 +87,56 @@ dec m = let varMultiset = fst . splitVarNonVar
                         error "multiple function symbols exist"
                     )
                 )
+
+-- Algorithm UNIFY section
+
+-- INITIALIZATION OF R
+
+-- Predicates
+isMEpmty :: Multiequation -> Bool
+isMEpmty (_, x) = MultiSet.null x
+
+-- Projections
+termName :: Term -> String
+termName (Var x) = x
+termName (Function x _) = x
+
+varsOfTerm :: Term ->  [Term]
+varsOfTerm (Var x) = [Var x]
+varsOfTerm (Function _ xs) = (concat . map varsOfTerm) xs
+
+varsOfTerms :: [Term] -> [Term]
+varsOfTerms xs = (concat . map varsOfTerm) xs
+
+countedVarsOfTerms :: [Term] -> [(Int, Term)]
+countedVarsOfTerms ts = ((map swap) . MultiSet.toAscOccurList . MultiSet.fromList . varsOfTerms) ts
+
+uniqueTermName :: Term -> String
+uniqueTermName (Var x) = x
+uniqueTermName (Function x xs) = x ++ (concat . map uniqueTermName) xs
+
+uniqueTermNameOverList :: [Term] -> String
+uniqueTermNameOverList xs = (concat . map uniqueTermName) xs
+
+-- Initiators
+initMeq :: [Term] -> [Term] -> Int -> (Int, Multiequation)
+initMeq vs ts occ = (occ, (Set.fromList vs, MultiSet.fromList ts))
+
+initVarMeq :: (Int, Term) -> (Int, Multiequation)
+initVarMeq (occ, t) = initMeq [t] [] occ
+
+initU :: [Term] -> SortedList (Int, Multiequation)
+initU ts = let firstMeq = initMeq [Var (uniqueTermNameOverList ts)] ts 0
+               listOfVars = countedVarsOfTerms ts
+               meqOfVars = map initVarMeq listOfVars in
+    SortedList.toSortedList (firstMeq : meqOfVars)
+
+initR :: [Term] -> ([Multiequation], SortedList (Int, Multiequation))
+initR xs = ([], initU xs)
+
+-- Picking S=M equation out of U
+-- pick_lowest :: SortedList (Int, Multiequation) ->
+
 
 encapsulate :: String -> String -> [String] -> String
 encapsulate l r xs = l ++ (intercalate ", ") xs ++ r

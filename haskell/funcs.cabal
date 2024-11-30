@@ -70,7 +70,8 @@ library
     build-depends:
         base ^>=4.17.2.1,
         multiset^>=0.3.4.3,
-        containers >= 0.6.7 && < 0.7
+        containers >= 0.6.7 && < 0.7,
+        sorted-list ^>= 0.2.2.0
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -106,4 +107,5 @@ test-suite funcs-test
         HUnit ^>=1.6.2,
         multiset^>=0.3.4.3,
         containers >= 0.6.7 && < 0.7,
+        sorted-list ^>= 0.2.2.0,
         funcs
