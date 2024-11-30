@@ -6,7 +6,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 
 import Data.Tuple (swap)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, isNothing)
 
 import Data.SortedList (SortedList)
 import qualified Data.SortedList as SortedList
@@ -111,6 +111,9 @@ varsOfTerms xs = (concat . map varsOfTerm) xs
 countedVarsOfTerms :: [Term] -> [(Int, Term)]
 countedVarsOfTerms ts = ((map swap) . MultiSet.toAscOccurList . MultiSet.fromList . varsOfTerms) ts
 
+countVarsInMultiSet :: MultiSet Term -> MultiSet Term
+countVarsInMultiSet ts = MultiSet.concatMap varsOfTerm ts
+
 uniqueTermName :: Term -> String
 uniqueTermName (Var x) = x
 uniqueTermName (Function x xs) = x ++ (concat . map uniqueTermName) xs
@@ -135,7 +138,25 @@ initR :: [Term] -> ([Multiequation], SortedList (Int, Multiequation))
 initR xs = ([], initU xs)
 
 -- Picking S=M equation out of U
--- pick_lowest :: SortedList (Int, Multiequation) ->
+countOccurences :: MultiSet Term -> Int -> Term -> Int
+countOccurences occMultSet allOcc currTerm = allOcc - (MultiSet.occur currTerm occMultSet)
+
+lowerCounter :: MultiSet Term -> (Int, Multiequation) -> (Int, Multiequation)
+lowerCounter occMultSet (count, (s, m)) = (Set.foldl (countOccurences occMultSet) count s, (s, m))
+
+removeMulEquation :: SortedList (Int, Multiequation) -> ((Int, Multiequation), SortedList (Int, Multiequation))
+removeMulEquation sl = let deconstructedU = SortedList.uncons sl in
+    if isNothing deconstructedU
+        then error "empty sorted list not allowed"
+        else
+            let (fstElem, newU) = fromJust deconstructedU
+                (count, (minS, minM)) = fstElem in
+                if count /= 0
+                    then error "cycle detected"
+                    else
+                        (fstElem, SortedList.map (lowerCounter (countVarsInMultiSet minM)) newU)
+
+
 
 
 encapsulate :: String -> String -> [String] -> String

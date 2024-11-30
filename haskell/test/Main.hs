@@ -108,6 +108,33 @@ terms_to_unify_paper_output = SortedList.toSortedList [
 test_initR :: Test
 test_initR = TestCase (assertEqual "" ([], terms_to_unify_paper_output) (initR terms_to_unify_paper_input))
 
+terms_remove_paper_beginning_output :: ((Int, Multiequation), SortedList (Int, Multiequation))
+terms_remove_paper_beginning_output = ((0, (Set.singleton (Var "fx1gx2x3x2bfghax5x2x1hax4x4"), MultiSet.fromList terms_to_unify_paper_input)), SortedList.toSortedList [
+    (0, (Set.singleton (Var "x1"), MultiSet.empty)),
+    (0, (Set.singleton (Var "x2"), MultiSet.empty)),
+    (0, (Set.singleton (Var "x3"), MultiSet.empty)),
+    (0, (Set.singleton (Var "x4"), MultiSet.empty)),
+    (0, (Set.singleton (Var "x5"), MultiSet.empty))
+    ])
+
+test_remove_paper_beginning :: Test
+test_remove_paper_beginning = TestCase (assertEqual "" terms_remove_paper_beginning_output (removeMulEquation terms_to_unify_paper_output))
+
+terms_remove_unit1_input :: SortedList (Int, Multiequation)
+terms_remove_unit1_input = SortedList.toSortedList [
+    (0, (Set.singleton (Var "x"), MultiSet.singleton (Function "f" [Var "x1", Var "x1", Var "x1"]))),
+    (3, (Set.singleton (Var "x1"), MultiSet.empty))
+    ]
+
+terms_remove_unit1_output :: ((Int, Multiequation), SortedList (Int, Multiequation))
+terms_remove_unit1_output = ((0, (Set.singleton (Var "x"), MultiSet.singleton (Function "f" [Var "x1", Var "x1", Var "x1"]))),
+    SortedList.toSortedList [
+        (0, (Set.singleton (Var "x1"), MultiSet.empty))
+    ])
+
+test_terms_remove_unit1 :: Test
+test_terms_remove_unit1 = TestCase (assertEqual "" terms_remove_unit1_output (removeMulEquation terms_remove_unit1_input))
+
 
 tests :: Test
 tests = TestList [
@@ -115,8 +142,10 @@ tests = TestList [
     TestLabel "DEC Unit 1" test_unit1,
     TestLabel "DEC Unit 2" test_unit2,
     -- 
-    TestLabel "INIT R Test paper" test_initR
+    TestLabel "INIT R Test paper" test_initR,
     --
+    TestLabel "REMOVE MEQ FROM U Test paper" test_remove_paper_beginning,
+    TestLabel "REMOVE MEQ FROM U Unit 1" test_terms_remove_unit1
     ]
 
 main :: IO ()
