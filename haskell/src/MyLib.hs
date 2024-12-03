@@ -15,18 +15,23 @@ import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
 
 -- coq functions fresh, elems
--- coq functions minuska var neco
+-- coq functions minuska varsof
 
 data Term = Var String
     | Function String [Term]
     deriving (Show, Ord, Eq)
 
-
+-- Multiequation is valid iff S is non-empty set of variables and T is mutliset of non-variable terms
 type Multiequation = (Set Term, MultiSet Term)
 type Multiequations = Set Multiequation
 
+
+-- T is valid iff T contains valid multiequations, right sides of T have at most one element and all elements in left sides of T
+-- can only occur in the right hand sides of T in equations PRECEDING this multiequation
 type T =  [Multiequation]
+-- U is valid iff U contains valid multiequations
 type U = SortedList (Int, Multiequation)
+-- R system is valid iff T is valid and U is valid, left sides of T and U are disjoint, and contain all variables
 type R = (T, U)
 
 -- Predicates
@@ -96,6 +101,12 @@ dec m = let varMultiset = fst . splitVarNonVar
 isMEpmty :: Multiequation -> Bool
 isMEpmty (_, x) = MultiSet.null x
 
+mulEqIntersect :: Multiequation -> Multiequation -> Bool
+mulEqIntersect (s1, _) (s2, _) = (not . Set.disjoint s1) s2
+
+uMulEqIntersect :: (Int, Multiequation) -> (Int, Multiequation) -> Bool
+uMulEqIntersect (_, ms1) (_, ms2) = mulEqIntersect ms1 ms2
+
 -- Projections
 termName :: Term -> String
 termName (Var x) = x
@@ -156,8 +167,73 @@ removeMulEquation sl = let deconstructedU = SortedList.uncons sl in
                     else
                         (fstElem, SortedList.map (lowerCounter (countVarsInMultiSet minM)) newU)
 
+-- TODO: not sure if it is as simple as just an addition of counts
+combineMulEquation :: (Int, Multiequation) -> (Int, Multiequation) -> (Int, Multiequation)
+combineMulEquation (count1, (s1, m1)) (count2, (s2, m2)) = (count1 + count2, (Set.union s1 s2, MultiSet.union m1 m2))
 
+combineMulEquations :: (Foldable f) => f (Int, Multiequation) -> (Int, Multiequation)
+combineMulEquations mulEqToCombine = foldl combineMulEquation (0, (Set.empty, MultiSet.empty)) mulEqToCombine
 
+accumulateVisitableVarsInUS :: Set Term -> Set (Set Term) -> (Int, Multiequation) -> Set (Set Term)
+accumulateVisitableVarsInUS currVertex currAccResult (_, (s, _)) = if (not . Set.disjoint currVertex) s 
+    then Set.insert s currAccResult
+    else currAccResult
+
+getAllReachableVars :: SortedList (Int, Multiequation) -> Set (Set Term) -> Set Term -> Set (Set Term)
+getAllReachableVars allVertices visitedVertices currVertex = let visitableVertices = foldl (accumulateVisitableVarsInUS currVertex) Set.empty allVertices
+                                                                 toVisitVertices = Set.difference visitableVertices visitedVertices
+                                                                 newVisited = Set.union toVisitVertices visitedVertices in
+    foldl (getAllReachableVars allVertices) newVisited toVisitVertices
+
+compactification :: SortedList (Int, Multiequation) -> SortedList (Int, Multiequation)
+compactification sl = let deconstructedUNPR = SortedList.uncons sl in
+    if isNothing deconstructedUNPR
+        -- this will do something else
+        then sl
+        else
+            let ((count, (s, m)), restSL) = fromJust deconstructedUNPR
+                allIntersectingSets = getAllReachableVars restSL (Set.singleton s) s
+                compactS = Set.unions allIntersectingSets in
+                    sl
+-- TODO finish
+
+selectMulEquation :: SortedList (Int, Multiequation) -> (Int, Multiequation)
+selectMulEquation sl = let deconstructedU = SortedList.uncons sl in
+    if isNothing deconstructedU
+        then error "empty sorted list not allowed"
+        else
+            let (fstElem, newU) = fromJust deconstructedU
+                (count, (minS, minM)) = fstElem in
+                    if count /= 0
+                        then error "cycle detected"
+                        else fstElem
+
+-- How to input these in Coq? Using inductive proposition?
+
+-- Assumptions:
+-- * input is a valid R system
+-- * inputted R system has unifier
+-- * R corresponds to some set of equations SE (always holds)
+-- Conclusions:
+-- * outputted R' system is valid
+-- * outputted R' system has unifier (this should be obvious if the following conclusion is proved)
+-- * outputted R' corresponds to SE, thus R and R' are equivalent
+unificationAlgorithmStep :: ([Multiequation], SortedList (Int, Multiequation)) -> ([Multiequation], SortedList (Int, Multiequation))
+unificationAlgorithmStep (t, u) = let deconstructedU = SortedList.uncons u in
+    if isNothing deconstructedU
+        then error "empty sorted list not allowed"
+        else
+            let (fstElem, newU) = fromJust deconstructedU
+                (count, (minS, minM)) = fstElem in
+                if count /= 0
+                    then error "cycle detected"
+                    else
+                        let 
+                            decrementedNewU = SortedList.map (lowerCounter (countVarsInMultiSet minM)) newU in
+                            (t ++ [], decrementedNewU)
+                        
+
+-- equationTransfer :: SortedList (Int, Multiequation) -> SortedList (Int, Multiequation)
 
 encapsulate :: String -> String -> [String] -> String
 encapsulate l r xs = l ++ (intercalate ", ") xs ++ r
