@@ -14,6 +14,14 @@ import qualified Data.SortedList as SortedList
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
 
+-- questions:
+--  - formulate the base (relation to set of equations)
+--   - term equality if identical (kulmon paper) - through some equality or proposition?
+--   - two operations (variable elimination, term reduction) creating SE' equivalent to SE
+--  - how to implement compactification
+--  - ask about ltac1 solvers and rewrites, auto, use of ; instead of ., exact, revert, clear, subst, assumption
+--  - ideal work flow (time of finishing pillars)
+
 -- coq functions fresh, elems
 -- coq functions minuska varsof
 
@@ -31,7 +39,7 @@ type Multiequations = Set Multiequation
 type T =  [Multiequation]
 -- U is valid iff U contains valid multiequations
 type U = SortedList (Int, Multiequation)
--- R system is valid iff T is valid and U is valid, left sides of T and U are disjoint, and contain all variables
+-- R system is valid iff T is valid and U is valid, left sides of T and U are disjoint, and contain all variables (this should be concludable from relation to set of equations SE)
 type R = (T, U)
 
 -- Predicates
@@ -43,6 +51,10 @@ isVar :: Term -> Bool
 isVar (Var _) = True
 isVar _ = False
 
+hasSingleElem :: [a] -> Bool
+hasSingleElem [_] = True
+hasSingleElem _ = False
+
 -- Projections
 fHead :: Term -> String
 fHead (Function x _) = x
@@ -50,10 +62,12 @@ fHead _ = error "not a function" -- corresponds to the definition from paper
 
 fParams :: Term -> [Term]
 fParams (Function _ x) = x
+fParams _ = error "not a function"
 
 -- Properties
 fArity :: Term -> Int
 fArity (Function _ x) = length x
+fArity _ = error "not a function"
 
 -- Convertors
 splitVarNonVar :: MultiSet Term -> (MultiSet Term, MultiSet Term)
@@ -66,27 +80,35 @@ makeMultEq :: MultiSet Term -> (Set Term, MultiSet Term)
 makeMultEq x = (finalFormConv . splitVarNonVar) x
 
 
+-- Assumptions:
+--  * input is valid right side of multiequation
+--  * input corresponds to some set of equations SE (implies that that all terms t_r,t_s from M are in relation of RST closure of Rse)
+-- Conclusions:
+--  * output corresponds to the same set of equations SE
+--  * output set of multiequations is valid
+
+
+-- How to prove it? By showing that each step is reversible, which means
+-- TODO: this function very likely fails on empty input.
 dec :: MultiSet Term -> (Term, Multiequations)
-dec m = let varMultiset = fst . splitVarNonVar
-            nonVarMultiset = snd . splitVarNonVar in (
-            if (not . MultiSet.null . varMultiset) m then 
-                ((head . MultiSet.elems . varMultiset) m, (Set.singleton . makeMultEq) m)
+-- here it would be better to use tuple unpacking
+dec m = let (varMultiset, nonVarMultiset) = splitVarNonVar m in (
+            if (not . MultiSet.null) varMultiset then 
+                ((head . MultiSet.elems) varMultiset, (Set.singleton . makeMultEq) m)
             else
-                let funcs = (MultiSet.distinctElems . nonVarMultiset) m
-                    funcNames = (nub . (map fHead)) funcs
-                    disFuncsAmount = length funcNames
-                    fstFunc = head funcs in (
-                    if disFuncsAmount == 1 then
-                        if isConstant fstFunc then
-                            (fstFunc, Set.empty :: Multiequations)
+                let funcs = (MultiSet.distinctElems) nonVarMultiset
+                    funcNames = (nub . map fHead) funcs
+                    headFuncs = head funcs in (
+                    if hasSingleElem funcNames then
+                        if isConstant headFuncs then
+                            (headFuncs, Set.empty :: Multiequations)
                         else
                             let funcParams = MultiSet.fold (\x y -> (fParams x):y) [] m
                                 mi = (transpose . reverse) funcParams -- reverse undoes reversion in the previous fold
                                 miMulSet = map MultiSet.fromList mi
-                                miCParams = map (fst . dec) miMulSet
-                                miFrontEqs = map (snd . dec) miMulSet
+                                (miCParams, miFrontEqs) = (unzip . map dec) miMulSet
                                 in (
-                                    ((Function (fHead fstFunc) miCParams), Set.unions miFrontEqs)
+                                    ((Function (fHead headFuncs) miCParams), Set.unions miFrontEqs)
                             )
                     else
                         error "multiple function symbols exist"
@@ -98,9 +120,6 @@ dec m = let varMultiset = fst . splitVarNonVar
 -- INITIALIZATION OF R
 
 -- Predicates
-isMEpmty :: Multiequation -> Bool
-isMEpmty (_, x) = MultiSet.null x
-
 mulEqIntersect :: Multiequation -> Multiequation -> Bool
 mulEqIntersect (s1, _) (s2, _) = (not . Set.disjoint s1) s2
 
@@ -185,17 +204,28 @@ getAllReachableVars allVertices visitedVertices currVertex = let visitableVertic
                                                                  newVisited = Set.union toVisitVertices visitedVertices in
     foldl (getAllReachableVars allVertices) newVisited toVisitVertices
 
-compactification :: SortedList (Int, Multiequation) -> SortedList (Int, Multiequation)
-compactification sl = let deconstructedUNPR = SortedList.uncons sl in
-    if isNothing deconstructedUNPR
-        -- this will do something else
-        then sl
-        else
-            let ((count, (s, m)), restSL) = fromJust deconstructedUNPR
-                allIntersectingSets = getAllReachableVars restSL (Set.singleton s) s
-                compactS = Set.unions allIntersectingSets in
-                    sl
+-- Since multiequation reduction adds to the Z only F (S=C will not be compactified due to [0] S)
+-- compactification :: (Foldable f) => f (Int, Multiequation) -> SortedList (Int, Multiequation)
+-- compactification sl = let deconstructedUNPR = SortedList.uncons sl in
+--     if isNothing deconstructedUNPR
+--         -- this will do something else
+--         then sl
+--         else
+--             let ((count, (s, m)), restSL) = fromJust deconstructedUNPR
+--                 allIntersectingSets = getAllReachableVars restSL (Set.singleton s) s
+--                 lol = SortedList.map restSL
+--                 compactS = Set.unions allIntersectingSets in
+--                     sl
 -- TODO finish
+
+mergeByVariable :: Term -> SortedList (Int, Multiequation) -> SortedList (Int, Multiequation)
+mergeByVariable (Var x) me = let (with_var, without_var) = SortedList.partition (\(occ , (l, _)) -> Set.member (Var x) l) me in
+    SortedList.union without_var ((SortedList.singleton . combineMulEquations) with_var)
+mergeByVariable _ _ = error "Only vars allowed"
+
+-- compactification :: SortedList (Int, Multiequation) -> (Multiequation, SortedList (Int, Multiequation))
+-- compactification sl = 
+
 
 selectMulEquation :: SortedList (Int, Multiequation) -> (Int, Multiequation)
 selectMulEquation sl = let deconstructedU = SortedList.uncons sl in
